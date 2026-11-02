@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "632124855664",
+    "project_id": "cyclersam26",
+    "storage_bucket": "cyclersam26.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:632124855664:android:967b92fa546fcabd36ebb5",
+        "android_client_info": {
+          "package_name": "com.example.cyclerdesing"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC3-bRCp1g_Z8o_gjknUR4a-lMPOyK9kLg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

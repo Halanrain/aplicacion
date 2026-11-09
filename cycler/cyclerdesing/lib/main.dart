@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'theme/theme.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
@@ -32,6 +33,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
+  bool _destinoActivo = false;
+
   void _onNavItemTapped(int index) {
     setState(() => _selectedIndex = index);
   }
@@ -41,62 +44,68 @@ class _HomeScreenState extends State<HomeScreen> {
     final colors = Theme.of(context).colorScheme;
     final List<Widget> views = [
       const _InicioContent(),
-      const MapaView(),
+      MapaView(
+        onDestinoActivo: (activo) => setState(() => _destinoActivo = activo),
+      ),
       const SocialView(),
       const PerfilView(),
     ];
     return Scaffold(
       backgroundColor: colors.surface,
       body: views[_selectedIndex],
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {},
-        backgroundColor: colors.primary,
-        foregroundColor: colors.onPrimary,
-        shape: const CircleBorder(),
-        child: const Icon(Icons.navigation),
-      ),
+      floatingActionButton: _destinoActivo
+          ? null
+          : FloatingActionButton(
+              onPressed: () {},
+              backgroundColor: colors.primary,
+              foregroundColor: colors.onPrimary,
+              shape: const CircleBorder(),
+              child: const Icon(Icons.navigation),
+            ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: AppColors.neutral0,
-          boxShadow: [AppElevation.elevation2],
-        ),
-        child: BottomAppBar(
-          height: 64,
-          padding: EdgeInsets.zero,
-          color: AppColors.neutral0,
-          elevation: 0,
-          child: Row(
-            children: [
-              _NavItem(
-                icon: Icons.home,
-                label: 'Inicio',
-                selected: _selectedIndex == 0,
-                onTap: () => _onNavItemTapped(0),
+      bottomNavigationBar: _destinoActivo
+          ? null
+          : Container(
+              decoration: BoxDecoration(
+                color: AppColors.neutral0,
+                boxShadow: [AppElevation.elevation2],
               ),
-              _NavItem(
-                icon: Icons.map_outlined,
-                label: 'Mapa',
-                selected: _selectedIndex == 1,
-                onTap: () => _onNavItemTapped(1),
+              child: BottomAppBar(
+                height: 64,
+                padding: EdgeInsets.zero,
+                color: AppColors.neutral0,
+                elevation: 0,
+                child: Row(
+                  children: [
+                    _NavItem(
+                      iconPath: 'assets/icons/icon-inicio.svg',
+                      label: 'Inicio',
+                      selected: _selectedIndex == 0,
+                      onTap: () => _onNavItemTapped(0),
+                    ),
+                    _NavItem(
+                      iconPath: 'assets/icons/icon-map-default.svg',
+                      label: 'Mapa',
+                      selected: _selectedIndex == 1,
+                      onTap: () => _onNavItemTapped(1),
+                    ),
+                    const Expanded(child: SizedBox()),
+                    _NavItem(
+                      iconPath: 'assets/icons/icon-social-default.svg',
+                      label: 'Social',
+                      selected: _selectedIndex == 2,
+                      onTap: () => _onNavItemTapped(2),
+                    ),
+                    _NavItem(
+                      iconPath: 'assets/icons/icon-perfil.svg',
+                      label: 'Perfil',
+                      selected: _selectedIndex == 3,
+                      onTap: () => _onNavItemTapped(3),
+                    ),
+                  ],
+                ),
               ),
-              const Expanded(child: SizedBox()),
-              _NavItem(
-                icon: Icons.emoji_events_outlined,
-                label: 'Social',
-                selected: _selectedIndex == 2,
-                onTap: () => _onNavItemTapped(2),
-              ),
-              _NavItem(
-                icon: Icons.person_outline,
-                label: 'Perfil',
-                selected: _selectedIndex == 3,
-                onTap: () => _onNavItemTapped(3),
-              ),
-            ],
-          ),
-        ),
-      ),
+            ),
     );
   }
 }
@@ -244,17 +253,32 @@ class _PostCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               IconButton(
-                icon: Icon(Icons.favorite_border, color: colors.outline),
+                icon: SvgPicture.asset(
+                  'assets/icons/icon-like.svg',
+                  width: 20,
+                  height: 20,
+                  colorFilter: ColorFilter.mode(colors.outline, BlendMode.srcIn),
+                ),
                 onPressed: () {},
               ),
               const SizedBox(width: AppGap.nav),
               IconButton(
-                icon: Icon(Icons.chat_bubble_outline, color: colors.outline),
+                icon: SvgPicture.asset(
+                  'assets/icons/icon-chat.svg',
+                  width: 20,
+                  height: 20,
+                  colorFilter: ColorFilter.mode(colors.outline, BlendMode.srcIn),
+                ),
                 onPressed: () {},
               ),
               const SizedBox(width: AppGap.nav),
               IconButton(
-                icon: Icon(Icons.ios_share, color: colors.outline),
+                icon: SvgPicture.asset(
+                  'assets/icons/icon-compartir.svg',
+                  width: 20,
+                  height: 20,
+                  colorFilter: ColorFilter.mode(colors.outline, BlendMode.srcIn),
+                ),
                 onPressed: () {},
               ),
             ],
@@ -266,12 +290,12 @@ class _PostCard extends StatelessWidget {
 }
 
 class _NavItem extends StatelessWidget {
-  final IconData icon;
+  final String iconPath;
   final String label;
   final bool selected;
   final VoidCallback onTap;
   const _NavItem({
-    required this.icon,
+    required this.iconPath,
     required this.label,
     required this.selected,
     required this.onTap,
@@ -280,22 +304,39 @@ class _NavItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
+    final color = selected ? colors.primary : colors.outline;
     return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: selected ? colors.primary : colors.outline),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: text.labelSmall?.copyWith(
-                color: selected ? colors.primary : colors.onSurface,
-              ),
+      child: Center(
+        child: InkWell(
+          onTap: onTap,
+          highlightColor: colors.primary.withValues(alpha: 0.12),
+          splashColor: colors.primary.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.space300,
+              vertical: AppSpacing.space100,
             ),
-          ],
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SvgPicture.asset(
+                  iconPath,
+                  width: 24,
+                  height: 24,
+                  colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  style: text.labelSmall?.copyWith(
+                    color: selected ? colors.primary : colors.onSurface,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

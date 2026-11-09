@@ -352,7 +352,7 @@ class AppTheme {
       errorContainer: AppColors.error50,
       onErrorContainer: AppColors.error800,
 
-      surface: AppColors.secondary100,
+      surface: AppColors.secondary50,
       onSurface: AppColors.neutral800,
 
       outline: AppColors.neutral300,

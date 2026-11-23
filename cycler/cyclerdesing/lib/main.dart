@@ -6,6 +6,7 @@ import 'firebase_options.dart';
 import 'views/mapa.dart';
 import 'views/social.dart';
 import 'views/perfil.dart';
+import 'views/splash.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,7 +20,7 @@ class MainApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       theme: AppTheme.light,
-      home: const HomeScreen(),
+      home: const SplashScreen(),
       debugShowCheckedModeBanner: false,
     );
   }
@@ -42,6 +43,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    // Detecta si el teclado está abierto
+    final keyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
     final List<Widget> views = [
       const _InicioContent(),
       MapaView(
@@ -53,7 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: colors.surface,
       body: views[_selectedIndex],
-      floatingActionButton: _destinoActivo
+      floatingActionButton: (_destinoActivo || keyboardOpen)
           ? null
           : FloatingActionButton(
               onPressed: () {},
@@ -63,7 +66,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: const Icon(Icons.navigation),
             ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: _destinoActivo
+      bottomNavigationBar: (_destinoActivo || keyboardOpen)
           ? null
           : Container(
               decoration: BoxDecoration(

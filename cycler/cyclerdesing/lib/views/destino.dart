@@ -1,4 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../theme/theme.dart';
@@ -16,6 +19,48 @@ class _BuscarDestinoViewState extends State<BuscarDestinoView> {
   List<Map<String, String>> _sugerencias = [];
   bool _cargando = false;
 
+  // ── Referencia a la subcolección del usuario actual ──────────────────
+  CollectionReference<Map<String, dynamic>>? get _busquedasRef {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return null;
+    return FirebaseFirestore.instance
+        .collection('usuarios')
+        .doc(uid)
+        .collection('busquedas_recientes');
+  }
+
+  // ── Guardar / actualizar búsqueda (Create + Update) ──────────────────
+  Future<void> _guardarBusqueda(Map<String, dynamic> lugar) async {
+    final ref = _busquedasRef;
+    if (ref == null) return;
+    final placeId = lugar['placeId'] as String;
+    if (placeId.isEmpty) return;
+
+    await ref.doc(placeId).set({
+      'nombre': lugar['nombre'],
+      'descripcion': lugar['descripcion'],
+      'placeId': placeId,
+      'lat': lugar['lat'],
+      'lng': lugar['lng'],
+      'fotos': lugar['fotos'],
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+
+    // Mantener máximo 5: eliminar los más antiguos si hay más de 5
+    final snap = await ref.orderBy('timestamp', descending: true).get();
+    if (snap.docs.length > 5) {
+      for (final doc in snap.docs.skip(5)) {
+        await doc.reference.delete();
+      }
+    }
+  }
+
+  // ── Eliminar búsqueda (Delete) ────────────────────────────────────────
+  Future<void> _eliminarBusqueda(String placeId) async {
+    await _busquedasRef?.doc(placeId).delete();
+  }
+
+  // ── Autocompletar con Places API ──────────────────────────────────────
   Future<void> _buscar(String texto) async {
     if (texto.isEmpty) {
       setState(() => _sugerencias = []);
@@ -28,7 +73,10 @@ class _BuscarDestinoViewState extends State<BuscarDestinoView> {
 
     final respuesta = await http.post(
       uri,
-      headers: {'Content-Type': 'application/json', 'X-Goog-Api-Key': _apiKey},
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': _apiKey,
+      },
       body: json.encode({
         'input': texto,
         'languageCode': 'es',
@@ -58,6 +106,7 @@ class _BuscarDestinoViewState extends State<BuscarDestinoView> {
     }
   }
 
+  // ── Seleccionar lugar desde sugerencias ───────────────────────────────
   Future<void> _seleccionarLugar(
     String placeId,
     String nombre,
@@ -95,24 +144,51 @@ class _BuscarDestinoViewState extends State<BuscarDestinoView> {
             )
             .toList());
 
-        final tipo =
-            data['primaryTypeDisplayName']?['text'] as String? ?? '';
+        final tipo = data['primaryTypeDisplayName']?['text'] as String? ?? '';
         final descripcion =
             tipo.isNotEmpty ? '$tipo · $secundario' : secundario;
 
-        Navigator.pop(context, {
+        final lugar = {
           'nombre': nombre,
           'descripcion': descripcion,
+          'placeId': placeId,
           'lat': lat,
           'lng': lng,
           'fotos': List<String>.from(fotos),
-        });
+        };
+
+        // Navegar inmediatamente — el guardado en Firestore va en segundo plano
+        if (mounted) Navigator.pop(context, lugar);
+
+        // Guardar sin bloquear la navegación (si falla, no importa)
+        unawaited(_guardarBusqueda(lugar).catchError((_) {}));
       } else if (mounted) {
+        setState(() => _cargando = false);
         Navigator.pop(context);
       }
     } catch (_) {
-      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        setState(() => _cargando = false);
+        Navigator.pop(context);
+      }
     }
+  }
+
+  // ── Seleccionar lugar desde búsquedas recientes ───────────────────────
+  void _seleccionarReciente(Map<String, dynamic> datos) {
+    Navigator.pop(context, {
+      'nombre': datos['nombre'],
+      'descripcion': datos['descripcion'],
+      'placeId': datos['placeId'],
+      'lat': (datos['lat'] as num).toDouble(),
+      'lng': (datos['lng'] as num).toDouble(),
+      'fotos': List<String>.from(datos['fotos'] ?? []),
+    });
+
+    // Actualizar timestamp (lo lleva al tope) — fire-and-forget
+    _busquedasRef?.doc(datos['placeId'] as String).update({
+      'timestamp': FieldValue.serverTimestamp(),
+    });
   }
 
   @override
@@ -125,6 +201,7 @@ class _BuscarDestinoViewState extends State<BuscarDestinoView> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
+
     return Scaffold(
       backgroundColor: colors.surface,
       body: Stack(
@@ -132,6 +209,7 @@ class _BuscarDestinoViewState extends State<BuscarDestinoView> {
           SafeArea(
             child: Column(
               children: [
+                // ── Barra de búsqueda ──────────────────────────────────
                 Padding(
                   padding: const EdgeInsets.all(AppSpacing.space400),
                   child: Container(
@@ -185,104 +263,15 @@ class _BuscarDestinoViewState extends State<BuscarDestinoView> {
                     ),
                   ),
                 ),
+
+                // ── Contenido principal ───────────────────────────────
                 Expanded(
                   child: _sugerencias.isEmpty
-                      ? ListView(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.space400,
-                          ),
-                          children: [
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: AppColors.accent500.withValues(
-                                    alpha: 0.15,
-                                  ),
-                                  borderRadius:
-                                      BorderRadius.circular(AppRadius.sm),
-                                ),
-                                child: const Icon(
-                                  Icons.home_outlined,
-                                  color: AppColors.accent500,
-                                ),
-                              ),
-                              title: Text(
-                                'Comienza desde casa',
-                                style: text.bodyLarge,
-                              ),
-                              subtitle: Text(
-                                'Morande 626',
-                                style: text.bodyMedium?.copyWith(
-                                  color: AppColors.neutral500,
-                                ),
-                              ),
-                              onTap: () {},
-                            ),
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: AppColors.brand500.withValues(
-                                    alpha: 0.15,
-                                  ),
-                                  borderRadius:
-                                      BorderRadius.circular(AppRadius.sm),
-                                ),
-                                child: const Icon(
-                                  Icons.navigation,
-                                  color: AppColors.brand500,
-                                ),
-                              ),
-                              title: Text(
-                                'Viajes desde tu ubicación actual',
-                                style: text.bodyLarge,
-                              ),
-                              onTap: () {},
-                            ),
-                            const SizedBox(height: AppSpacing.space400),
-                            Text(
-                              'Búsquedas recientes',
-                              style: text.titleSmall?.copyWith(
-                                color: AppColors.neutral800,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: AppSpacing.space200),
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: AppColors.accent500.withValues(
-                                    alpha: 0.15,
-                                  ),
-                                  borderRadius:
-                                      BorderRadius.circular(AppRadius.sm),
-                                ),
-                                child: const Icon(
-                                  Icons.landscape_outlined,
-                                  color: AppColors.accent500,
-                                ),
-                              ),
-                              title: Text(
-                                'Cerro Santa Lucía',
-                                style: text.bodyLarge,
-                              ),
-                              subtitle: Text(
-                                'Sitio histórico, Chile',
-                                style: text.bodyMedium?.copyWith(
-                                  color: AppColors.neutral500,
-                                ),
-                              ),
-                              onTap: () {},
-                            ),
-                          ],
+                      ? _EstadoInicial(
+                          text: text,
+                          busquedasRef: _busquedasRef,
+                          onSeleccionarReciente: _seleccionarReciente,
+                          onEliminarReciente: _eliminarBusqueda,
                         )
                       : ListView.builder(
                           padding: const EdgeInsets.symmetric(
@@ -322,7 +311,7 @@ class _BuscarDestinoViewState extends State<BuscarDestinoView> {
             ),
           ),
 
-          // Overlay de carga mientras se obtienen detalles del lugar
+          // ── Overlay de carga ──────────────────────────────────────────
           if (_cargando)
             Container(
               color: AppColors.neutral800.withValues(alpha: 0.3),
@@ -332,6 +321,162 @@ class _BuscarDestinoViewState extends State<BuscarDestinoView> {
             ),
         ],
       ),
+    );
+  }
+}
+
+// ─── Estado inicial (sin texto en buscador) ────────────────────────────────
+
+class _EstadoInicial extends StatelessWidget {
+  final TextTheme text;
+  final CollectionReference<Map<String, dynamic>>? busquedasRef;
+  final void Function(Map<String, dynamic>) onSeleccionarReciente;
+  final Future<void> Function(String) onEliminarReciente;
+
+  const _EstadoInicial({
+    required this.text,
+    required this.busquedasRef,
+    required this.onSeleccionarReciente,
+    required this.onEliminarReciente,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space400),
+      children: [
+        // Accesos rápidos fijos
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppColors.accent500.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+            ),
+            child: const Icon(Icons.home_outlined, color: AppColors.accent500),
+          ),
+          title: Text('Comienza desde casa', style: text.bodyLarge),
+          subtitle: Text(
+            'Morande 626',
+            style: text.bodyMedium?.copyWith(color: AppColors.neutral500),
+          ),
+          onTap: () {},
+        ),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppColors.brand500.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+            ),
+            child: const Icon(Icons.navigation, color: AppColors.brand500),
+          ),
+          title: Text(
+            'Viajes desde tu ubicación actual',
+            style: text.bodyLarge,
+          ),
+          onTap: () {},
+        ),
+
+        const SizedBox(height: AppSpacing.space400),
+
+        // ── Búsquedas recientes (Read desde Firestore) ──────────────
+        Text(
+          'Búsquedas recientes',
+          style: text.titleSmall?.copyWith(
+            color: AppColors.neutral800,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.space200),
+
+        if (busquedasRef == null)
+          const SizedBox.shrink()
+        else
+          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: busquedasRef!
+                .orderBy('timestamp', descending: true)
+                .limit(5)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: AppSpacing.space400),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      color: AppColors.brand500,
+                      strokeWidth: 2,
+                    ),
+                  ),
+                );
+              }
+
+              final docs = snapshot.data?.docs ?? [];
+
+              if (docs.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: AppSpacing.space400,
+                  ),
+                  child: Text(
+                    'Aún no tienes búsquedas recientes.',
+                    style: text.bodyMedium?.copyWith(
+                      color: AppColors.neutral500,
+                    ),
+                  ),
+                );
+              }
+
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: docs.map((doc) {
+                  final datos = doc.data();
+                  final nombre = datos['nombre'] as String? ?? '';
+                  final descripcion = datos['descripcion'] as String? ?? '';
+                  final placeId = datos['placeId'] as String? ?? '';
+
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: AppColors.neutral200,
+                        borderRadius: BorderRadius.circular(AppRadius.sm),
+                      ),
+                      child: const Icon(
+                        Icons.history,
+                        color: AppColors.neutral500,
+                      ),
+                    ),
+                    title: Text(nombre, style: text.bodyLarge),
+                    subtitle: Text(
+                      descripcion,
+                      style: text.bodyMedium?.copyWith(
+                        color: AppColors.neutral500,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(
+                        Icons.close,
+                        size: 18,
+                        color: AppColors.neutral400,
+                      ),
+                      onPressed: () => onEliminarReciente(placeId),
+                      tooltip: 'Eliminar búsqueda',
+                    ),
+                    onTap: () => onSeleccionarReciente(datos),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+      ],
     );
   }
 }

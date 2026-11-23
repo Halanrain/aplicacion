@@ -1,7 +1,11 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../theme/theme.dart';
+import 'editorPerfil.dart';
+import 'settings.dart';
 
 class PerfilView extends StatelessWidget {
   const PerfilView({super.key});
@@ -9,81 +13,135 @@ class PerfilView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
 
     return Scaffold(
       backgroundColor: colors.surface,
-      appBar: AppBar(
-        toolbarHeight: 72,
-        backgroundColor: colors.surface,
-        surfaceTintColor: Colors.transparent,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: Row(
-              children: [
-                _ProfileHeaderIcon(
-                  asset: 'assets/icons/icon-notification.svg',
-                  semanticLabel: 'Notificaciones',
-                ),
-                const SizedBox(width: 12),
-                _ProfileHeaderIcon(
-                  asset: 'assets/icons/icon-settings.svg',
-                  semanticLabel: 'Configuración',
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-      body: DefaultTabController(
+      body: SafeArea(
+        child: DefaultTabController(
         length: 2,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // ── Fila título + iconos (igual que social.dart) ─────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                AppSpacing.space600,
+                AppSpacing.space400,
+                AppSpacing.space400,
+                AppSpacing.space400,
                 AppSpacing.space200,
-                AppSpacing.space600,
-                0,
               ),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const _ProfileAvatar(),
-                  const SizedBox(width: AppSpacing.space400),
                   Expanded(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Matías Contreras',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTypography.subtitle1.copyWith(
-                            color: AppColors.neutral800,
-                          ),
-                        ),
-                        const SizedBox(height: AppSpacing.space200),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            const _ProfileStat(
-                              label: 'Seguidores',
-                              value: '143',
-                            ),
-                            const SizedBox(width: AppSpacing.space500),
-                            const _ProfileStat(label: 'Siguiendo', value: '84'),
-                            const Spacer(),
-                            const _AddPersonButton(),
-                          ],
-                        ),
-                      ],
+                    child: Text(
+                      'Perfil',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                  _ProfileHeaderIcon(
+                    asset: 'assets/icons/icon-notification.svg',
+                    semanticLabel: 'Notificaciones',
+                  ),
+                  const SizedBox(width: 12),
+                  _ProfileHeaderIcon(
+                    asset: 'assets/icons/icon-settings.svg',
+                    semanticLabel: 'Configuración',
+                    onTap: () => Navigator.push(
+                      context,
+                      PageRouteBuilder(
+                        pageBuilder: (_, __, ___) => const SettingsView(),
+                        transitionDuration: Duration.zero,
+                        reverseTransitionDuration: Duration.zero,
+                      ),
                     ),
                   ),
                 ],
               ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.space600,
+                0,
+                AppSpacing.space600,
+                0,
+              ),
+              child: uid == null
+                  ? const SizedBox.shrink()
+                  : StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                      stream: FirebaseFirestore.instance
+                          .collection('usuarios')
+                          .doc(uid)
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        final data = snapshot.data?.data();
+                        final nombre = data?['nombre'] as String? ?? '';
+                        final apellido = data?['apellido'] as String? ?? '';
+                        final nombreCompleto =
+                            '$nombre $apellido'.trim().isEmpty
+                                ? 'Usuario'
+                                : '$nombre $apellido'.trim();
+                        final seguidores =
+                            (data?['seguidores'] as int? ?? 0).toString();
+                        final siguiendo =
+                            (data?['siguiendo'] as int? ?? 0).toString();
+                        final foto = data?['foto'] as String? ?? '';
+
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _ProfileAvatar(
+                              foto: foto,
+                              onTap: () => Navigator.push(
+                                context,
+                                PageRouteBuilder(
+                                  pageBuilder: (_, __, ___) =>
+                                      const EditorPerfilView(),
+                                  transitionDuration: Duration.zero,
+                                  reverseTransitionDuration: Duration.zero,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.space400),
+                            Expanded(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    nombreCompleto,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTypography.subtitle1.copyWith(
+                                      color: AppColors.neutral800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: AppSpacing.space200),
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.end,
+                                    children: [
+                                      _ProfileStat(
+                                        label: 'Seguidores',
+                                        value: seguidores,
+                                      ),
+                                      const SizedBox(
+                                          width: AppSpacing.space500),
+                                      _ProfileStat(
+                                        label: 'Siguiendo',
+                                        value: siguiendo,
+                                      ),
+                                      const Spacer(),
+                                      const _AddPersonButton(),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
             ),
             const SizedBox(height: AppSpacing.space400),
             TabBar(
@@ -104,7 +162,8 @@ class PerfilView extends StatelessWidget {
             ),
           ],
         ),
-      ),
+        ), // cierre DefaultTabController
+      ), // cierre SafeArea
     );
   }
 }
@@ -400,56 +459,80 @@ class _ProfileMetricCard extends StatelessWidget {
   }
 }
 
+// ── Avatar de perfil ────────────────────────────────────────────────────────
 class _ProfileAvatar extends StatelessWidget {
-  const _ProfileAvatar();
+  const _ProfileAvatar({this.foto = '', this.onTap});
+
+  final String foto;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
       label: 'Foto de perfil',
-      child: SizedBox(
-        width: 70,
-        height: 70,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppColors.neutral100,
-                border: Border.all(color: AppColors.brand500, width: 1.5),
-              ),
-              child: const Center(
-                child: Icon(
-                  Icons.person,
-                  size: 28,
-                  color: AppColors.neutral500,
-                ),
-              ),
-            ),
-            Positioned(
-              right: -1,
-              bottom: 0,
-              child: Container(
-                width: 18,
-                height: 18,
-                decoration: const BoxDecoration(
-                  color: AppColors.accent500,
+      button: onTap != null,
+      child: GestureDetector(
+        onTap: onTap,
+        child: SizedBox(
+          width: 70,
+          height: 70,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
                   shape: BoxShape.circle,
+                  color: AppColors.neutral100,
+                  border: Border.all(color: AppColors.brand500, width: 1.5),
                 ),
-                alignment: Alignment.center,
-                child: SvgPicture.asset(
-                  'assets/icons/icon-edit.svg',
-                  width: 10,
-                  height: 10,
-                  colorFilter: const ColorFilter.mode(
-                    AppColors.neutral0,
-                    BlendMode.srcIn,
+                child: ClipOval(
+                  child: foto.isNotEmpty
+                      ? Image.network(
+                          foto,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => const Center(
+                            child: Icon(
+                              Icons.person,
+                              size: 28,
+                              color: AppColors.neutral500,
+                            ),
+                          ),
+                        )
+                      : const Center(
+                          child: Icon(
+                            Icons.person,
+                            size: 28,
+                            color: AppColors.neutral500,
+                          ),
+                        ),
+                ),
+              ),
+              Positioned(
+                right: -1,
+                bottom: 0,
+                child: Container(
+                  width: 18,
+                  height: 18,
+                  decoration: const BoxDecoration(
+                    color: AppColors.accent500,
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: SvgPicture.asset(
+                    'assets/icons/icon-edit.svg',
+                    width: 10,
+                    height: 10,
+                    colorFilter: const ColorFilter.mode(
+                      AppColors.neutral0,
+                      BlendMode.srcIn,
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -513,25 +596,34 @@ class _AddPersonButton extends StatelessWidget {
 }
 
 class _ProfileHeaderIcon extends StatelessWidget {
-  const _ProfileHeaderIcon({required this.asset, required this.semanticLabel});
+  const _ProfileHeaderIcon({
+    required this.asset,
+    required this.semanticLabel,
+    this.onTap,
+  });
 
   final String asset;
   final String semanticLabel;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
       label: semanticLabel,
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: AppColors.neutral0,
-          shape: BoxShape.circle,
-          border: Border.all(color: const Color(0xFFCAD0DA)),
+      button: onTap != null,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: AppColors.neutral0,
+            shape: BoxShape.circle,
+            border: Border.all(color: const Color(0xFFCAD0DA)),
+          ),
+          alignment: Alignment.center,
+          child: SvgPicture.asset(asset, width: 22, height: 22),
         ),
-        alignment: Alignment.center,
-        child: SvgPicture.asset(asset, width: 22, height: 22),
       ),
     );
   }
